@@ -16,6 +16,13 @@ public class WardenController : MonoBehaviour
     [Tooltip("地面移動時的水平加速度量級（ForceMode.Acceleration）；水泥基準，岩漿／冰再乘以下方係數")]
     [SerializeField] private float moveSpeed = 7f;
 
+    /// <summary>地面移動速度（拉霸等大獎效果可暫時修改）。</summary>
+    public float MoveSpeed
+    {
+        get => moveSpeed;
+        set => moveSpeed = value;
+    }
+
     [Tooltip("跳躍瞬間施加於 Y 軸的力道（ForceMode.Impulse）")]
     [SerializeField] private float jumpForce = 12f;
 

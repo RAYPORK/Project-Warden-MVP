@@ -33,6 +33,13 @@ public class WardenWinchSystem : MonoBehaviour
 
     [SerializeField] private float maxRopeLength = 20f;
 
+    /// <summary>繩索最大長度（拉霸等大獎效果可暫時修改）。</summary>
+    public float MaxRopeLength
+    {
+        get => maxRopeLength;
+        set => maxRopeLength = value;
+    }
+
     [SerializeField] private float minRopeLength = 2f;
 
     [Tooltip("自動收線速率（公尺／秒）")]
