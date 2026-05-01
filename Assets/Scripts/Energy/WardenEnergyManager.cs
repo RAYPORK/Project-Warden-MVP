@@ -25,6 +25,26 @@ public class WardenEnergyManager : MonoBehaviour
     /// <summary>能量上限。</summary>
     public float MaxEnergy => maxEnergy;
 
+    /// <summary>訂閱能量變化（與 Inspector 綁定之 onEnergyChanged 並存）。</summary>
+    public void AddEnergyChangedListener(UnityAction<float> listener)
+    {
+        if (listener != null)
+            onEnergyChanged.AddListener(listener);
+    }
+
+    /// <summary>取消訂閱能量變化。</summary>
+    public void RemoveEnergyChangedListener(UnityAction<float> listener)
+    {
+        if (listener != null)
+            onEnergyChanged.RemoveListener(listener);
+    }
+
+    /// <summary>將能量設為上限（再試一次／重開流程用）。</summary>
+    public void RestoreFullEnergy()
+    {
+        SetCurrent(maxEnergy);
+    }
+
     private void Awake()
     {
         _current = Mathf.Clamp(startingEnergy, 0f, maxEnergy);

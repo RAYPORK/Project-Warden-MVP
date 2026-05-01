@@ -113,6 +113,7 @@ public class WardenSlotSystem : MonoBehaviour
     private int _pityLossStreak;
     private Coroutine _spinRoutine;
     private Coroutine _jackpotRestoreRoutine;
+    private Coroutine _overloadRoutine;
 
     /// <summary>大獎還原用：快取於 Start 時的移動速度與繩長上限。</summary>
     private float _baselineMoveSpeed;
@@ -296,7 +297,9 @@ public class WardenSlotSystem : MonoBehaviour
             case SlotOutcome.Overload:
                 onOverload?.Invoke();
                 onOverloadEnergyClear?.Invoke();
-                StartCoroutine(OverloadTimedEvents());
+                if (_overloadRoutine != null)
+                    StopCoroutine(_overloadRoutine);
+                _overloadRoutine = StartCoroutine(OverloadTimedEvents());
                 break;
             default:
                 onNormal?.Invoke();
@@ -341,6 +344,31 @@ public class WardenSlotSystem : MonoBehaviour
 
         onOverloadGlitchEnd?.Invoke();
         onOverloadInvincibleEnd?.Invoke();
+        _overloadRoutine = null;
+    }
+
+    /// <summary>死亡當下：僅中斷拉霸轉動協程（不處理大獎／過載計時）。</summary>
+    public void HaltActiveSlotCoroutines()
+    {
+        if (_spinRoutine != null)
+        {
+            StopCoroutine(_spinRoutine);
+            _spinRoutine = null;
+        }
+
+        _isSpinning = false;
+    }
+
+    /// <summary>再試一次／重開：保底歸零並確保拉霸未在轉動。</summary>
+    public void ResetForNewRun()
+    {
+        _pityLossStreak = 0;
+        _isSpinning = false;
+        if (_spinRoutine != null)
+        {
+            StopCoroutine(_spinRoutine);
+            _spinRoutine = null;
+        }
     }
 
     private void OnDestroy()

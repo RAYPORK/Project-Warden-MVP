@@ -18,6 +18,14 @@ public class WardenRoomGenerator : MonoBehaviour
     [Header("Prefab")]
     [SerializeField] private GameObject platformPrefab;
 
+    [Header("能量方塊")]
+    [Tooltip("須含 WardenEnergyPickup；可選擇命名 EnergyPickup_xxx 或 Tag「EnergyPickup」以便清除")]
+    [SerializeField] private GameObject energyPickupPrefab;
+
+    [Tooltip("每次生成地圖時在空間內撒落的數量")]
+    [Range(0, 50)]
+    [SerializeField] private int energyPickupCount = 20;
+
     [Header("材質類型設定")]
     [SerializeField] private Material matCementGrey;
     [SerializeField] private Material matLava;
@@ -32,6 +40,10 @@ public class WardenRoomGenerator : MonoBehaviour
     [Header("生成容器")]
     [SerializeField] private Transform generatedRoot;
 
+    [Header("收集模式")]
+    [Tooltip("能量方塊生成完畢後重置進度與計時")]
+    [SerializeField] private WardenCollectionManager collectionManager;
+
     [Header("事件")]
     [SerializeField] private UnityEvent onMapGenerated;
 
@@ -41,14 +53,24 @@ public class WardenRoomGenerator : MonoBehaviour
     private const float MinSize = 1f;
     private const float MaxSize = 3f;
     private const float PlatformThickness = 0.5f;
-    private const float MaxHorizontalGap = 10f;
-    private const float MaxVerticalGap = 6f;
     private const int MinPlatforms = 80;
     private const int MaxPlatforms = 120;
 
+    /// <summary>能量方塊與任一平台中心的最小距離（公尺）。</summary>
+    private const float EnergyPickupMinDistFromPlatformCenter = 2f;
+
+    /// <summary>能量方塊彼此中心的最小距離（公尺）。</summary>
+    private const float EnergyPickupMinDistBetween = 2f;
+
+    /// <summary>能量方塊世界 Y 範圍（避開貼地與貼頂）。</summary>
+    private const float EnergyPickupYMin = 1f;
+    private const float EnergyPickupYMax = 39f;
+
+    /// <summary>單一方塊隨機位置最大嘗試次數。</summary>
+    private const int EnergyPickupMaxAttemptsPerItem = 200;
+
     private static readonly Vector3 StartPos = new Vector3(0f, 0f, 0f);
-    private static readonly Vector3 EndPos = new Vector3(75f, 35f, 45f);
-    private static readonly Vector3 FixedStartEndSize = new Vector3(3f, PlatformThickness, 3f);
+    private static readonly Vector3 FixedStartSize = new Vector3(3f, PlatformThickness, 3f);
 
     private System.Random _rng;
 
@@ -57,7 +79,6 @@ public class WardenRoomGenerator : MonoBehaviour
         public Vector3 Position;
         public Vector3 Size;
         public bool IsStart;
-        public bool IsEnd;
         public MaterialType MaterialType;
     }
 
@@ -69,12 +90,13 @@ public class WardenRoomGenerator : MonoBehaviour
     private void Update()
     {
         if (IsRegeneratePressed())
-        {
-            seed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
             GenerateMap();
-        }
     }
 
+    /// <summary>
+    /// 使用<strong>新隨機種子</strong>重新執行場景生成（起點／終點、平台列表與材質抽樣）。
+    /// 首次 <see cref="Start"/> 呼叫時亦會換新種子；若需固定首局種子請在生成後於 Inspector 調整流程。
+    /// </summary>
     [ContextMenu("Generate Map")]
     public void GenerateMap()
     {
@@ -84,12 +106,15 @@ public class WardenRoomGenerator : MonoBehaviour
             return;
         }
 
+        seed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
         _rng = new System.Random(seed);
         EnsureRoot();
         ClearGenerated();
 
         List<PlatformData> platforms = BuildPlatformLayout();
         SpawnPlatforms(platforms);
+        int spawnedPickups = SpawnEnergyPickups(platforms);
+        NotifyCollectionManagerReset(spawnedPickups);
         onMapGenerated?.Invoke();
     }
 
@@ -116,6 +141,109 @@ public class WardenRoomGenerator : MonoBehaviour
             Destroy(generatedRoot.GetChild(i).gameObject);
     }
 
+    /// <summary>
+    /// 清除上一局留在 <see cref="generatedRoot"/> 下的能量方塊（名稱前綴或 Tag）。
+    /// 註：<see cref="ClearGenerated"/> 已會清空整個容器，此方法供單獨呼叫時保險用。
+    /// </summary>
+    private void ClearExistingEnergyPickups()
+    {
+        if (generatedRoot == null)
+            return;
+
+        for (int i = generatedRoot.childCount - 1; i >= 0; i--)
+        {
+            GameObject go = generatedRoot.GetChild(i).gameObject;
+            if (go.name.StartsWith("EnergyPickup_", StringComparison.Ordinal))
+            {
+                Destroy(go);
+                continue;
+            }
+
+            if (go.CompareTag("EnergyPickup"))
+                Destroy(go);
+        }
+    }
+
+    /// <summary>
+    /// 在 80×40×50 空間內撒落能量方塊：遠離平台中心與彼此，Y 介於 1～39，使用與地圖相同的 <see cref="_rng"/>。
+    /// </summary>
+    /// <returns>實際生成數量（可能小於 <see cref="energyPickupCount"/>）。</returns>
+    private int SpawnEnergyPickups(List<PlatformData> platforms)
+    {
+        if (energyPickupPrefab == null)
+        {
+            if (energyPickupCount > 0)
+                Debug.LogWarning("[WardenRoomGenerator] 未指定 energyPickupPrefab，已跳過能量方塊生成。", this);
+            return 0;
+        }
+
+        if (energyPickupCount <= 0)
+            return 0;
+
+        EnsureRoot();
+        ClearExistingEnergyPickups();
+
+        var spawnedCenters = new List<Vector3>(energyPickupCount);
+
+        for (int i = 0; i < energyPickupCount; i++)
+        {
+            bool placed = false;
+            for (int attempt = 0; attempt < EnergyPickupMaxAttemptsPerItem; attempt++)
+            {
+                float x = RandomRange(0f, SpaceX);
+                float y = RandomRange(EnergyPickupYMin, EnergyPickupYMax);
+                float z = RandomRange(0f, SpaceZ);
+                Vector3 candidate = new Vector3(x, y, z);
+
+                if (!IsValidEnergyPickupPosition(candidate, platforms, spawnedCenters))
+                    continue;
+
+                GameObject go = Instantiate(energyPickupPrefab, candidate, Quaternion.identity, generatedRoot);
+                go.name = $"EnergyPickup_{i:000}";
+                spawnedCenters.Add(candidate);
+                placed = true;
+                break;
+            }
+
+            if (!placed)
+            {
+                Debug.LogWarning(
+                    $"[WardenRoomGenerator] 能量方塊第 {i} 個在 {EnergyPickupMaxAttemptsPerItem} 次嘗試後仍無合適位置，已停止後續生成。",
+                    this);
+                break;
+            }
+        }
+
+        return spawnedCenters.Count;
+    }
+
+    /// <summary>通知收集管理器本局能量方塊總數（含 0）。</summary>
+    private void NotifyCollectionManagerReset(int spawnedPickups)
+    {
+        if (collectionManager == null)
+            collectionManager = UnityEngine.Object.FindFirstObjectByType<WardenCollectionManager>();
+        if (collectionManager != null)
+            collectionManager.ResetForNewRun(spawnedPickups);
+    }
+
+    /// <summary>與所有平台中心距離皆 &gt; 2m，且與已放方塊中心距離皆 ≥ 2m。</summary>
+    private bool IsValidEnergyPickupPosition(Vector3 p, List<PlatformData> platforms, List<Vector3> existingPickups)
+    {
+        for (int i = 0; i < platforms.Count; i++)
+        {
+            if (Vector3.Distance(p, platforms[i].Position) <= EnergyPickupMinDistFromPlatformCenter)
+                return false;
+        }
+
+        for (int i = 0; i < existingPickups.Count; i++)
+        {
+            if (Vector3.Distance(p, existingPickups[i]) < EnergyPickupMinDistBetween)
+                return false;
+        }
+
+        return true;
+    }
+
     private List<PlatformData> BuildPlatformLayout()
     {
         int totalCount = _rng.Next(MinPlatforms, MaxPlatforms + 1);
@@ -124,97 +252,17 @@ public class WardenRoomGenerator : MonoBehaviour
         PlatformData start = new PlatformData
         {
             Position = StartPos,
-            Size = FixedStartEndSize,
+            Size = FixedStartSize,
             IsStart = true,
             MaterialType = MaterialType.Concrete
         };
-        PlatformData end = new PlatformData
-        {
-            Position = EndPos,
-            Size = FixedStartEndSize,
-            IsEnd = true,
-            MaterialType = MaterialType.Concrete
-        };
         platforms.Add(start);
-
-        platforms.Add(end);
 
         int safety = 0;
         while (platforms.Count < totalCount && safety++ < 4000)
             TryAddRandomPlatform(platforms);
 
-        if (!HasPathStartToEnd(platforms))
-        {
-            // 若填充後意外破壞可達性，重新補主路徑。
-            List<PlatformData> repairPath = BuildMainPath(start, end, platforms);
-            platforms.AddRange(repairPath);
-        }
-
         return platforms;
-    }
-
-    /// <summary>建立由起點到終點的骨幹路徑，確保每步都符合可達距離。</summary>
-    private List<PlatformData> BuildMainPath(PlatformData start, PlatformData end, List<PlatformData> existing)
-    {
-        List<PlatformData> path = new List<PlatformData>();
-        PlatformData current = start;
-
-        for (int i = 0; i < 128; i++)
-        {
-            if (IsReachable(current.Position, end.Position))
-                break;
-
-            if (!TryCreateTowardTarget(current.Position, end.Position, existing, path, out PlatformData next))
-                continue;
-
-            path.Add(next);
-            current = next;
-        }
-
-        return path;
-    }
-
-    private bool TryCreateTowardTarget(
-        Vector3 from,
-        Vector3 target,
-        List<PlatformData> existing,
-        List<PlatformData> staged,
-        out PlatformData result)
-    {
-        for (int retry = 0; retry < 80; retry++)
-        {
-            Vector2 fromXZ = new Vector2(from.x, from.z);
-            Vector2 targetXZ = new Vector2(target.x, target.z);
-            Vector2 dir = (targetXZ - fromXZ).normalized;
-            if (dir.sqrMagnitude < 0.0001f)
-            {
-                float a = RandomRange(0f, Mathf.PI * 2f);
-                dir = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
-            }
-
-            float stepH = Mathf.Lerp(4f, MaxHorizontalGap, (float)_rng.NextDouble());
-            float nx = from.x + dir.x * stepH + RandomRange(-1.2f, 1.2f);
-            float nz = from.z + dir.y * stepH + RandomRange(-1.2f, 1.2f);
-            float ny = Mathf.MoveTowards(from.y, target.y, MaxVerticalGap) + RandomRange(-1f, 1f);
-
-            Vector3 size = RandomSize();
-            Vector3 pos = ClampCenterInsideBounds(new Vector3(nx, ny, nz), size);
-            PlatformData candidate = new PlatformData
-            {
-                Position = pos,
-                Size = size,
-                MaterialType = PickRandomMaterialType()
-            };
-
-            if (!IsReachable(from, pos)) continue;
-            if (OverlapsAny(candidate, existing) || OverlapsAny(candidate, staged)) continue;
-
-            result = candidate;
-            return true;
-        }
-
-        result = default;
-        return false;
     }
 
     /// <summary>
@@ -246,48 +294,6 @@ public class WardenRoomGenerator : MonoBehaviour
         }
 
         return false;
-    }
-
-    private bool HasPathStartToEnd(List<PlatformData> platforms)
-    {
-        int startIndex = -1;
-        int endIndex = -1;
-        for (int i = 0; i < platforms.Count; i++)
-        {
-            if (platforms[i].IsStart) startIndex = i;
-            if (platforms[i].IsEnd) endIndex = i;
-        }
-        if (startIndex < 0 || endIndex < 0) return false;
-
-        Queue<int> q = new Queue<int>();
-        bool[] visited = new bool[platforms.Count];
-        q.Enqueue(startIndex);
-        visited[startIndex] = true;
-
-        while (q.Count > 0)
-        {
-            int cur = q.Dequeue();
-            if (cur == endIndex) return true;
-
-            for (int i = 0; i < platforms.Count; i++)
-            {
-                if (visited[i] || i == cur) continue;
-                if (!IsReachable(platforms[cur].Position, platforms[i].Position)) continue;
-                visited[i] = true;
-                q.Enqueue(i);
-            }
-        }
-
-        return false;
-    }
-
-    private static bool IsReachable(Vector3 a, Vector3 b)
-    {
-        Vector2 aXZ = new Vector2(a.x, a.z);
-        Vector2 bXZ = new Vector2(b.x, b.z);
-        float h = Vector2.Distance(aXZ, bXZ);
-        float v = Mathf.Abs(a.y - b.y);
-        return h <= MaxHorizontalGap + 0.001f && v <= MaxVerticalGap + 0.001f;
     }
 
     private static bool OverlapsAny(PlatformData candidate, List<PlatformData> list)
@@ -334,11 +340,10 @@ public class WardenRoomGenerator : MonoBehaviour
             go.transform.localScale = p.Size;
 
             if (p.IsStart) go.name = "Platform_Start";
-            else if (p.IsEnd) go.name = "Platform_End";
             else go.name = $"Platform_{i:000}";
 
-            // 起點與終點固定為 Concrete，其他平台使用抽樣材質類型。
-            MaterialType type = (p.IsStart || p.IsEnd) ? MaterialType.Concrete : p.MaterialType;
+            // 起點固定為 Concrete，其他平台使用抽樣材質類型。
+            MaterialType type = p.IsStart ? MaterialType.Concrete : p.MaterialType;
             ApplyMaterial(go, type);
 
             // 供鋼索 Raycast 判定平台材質（水泥／岩漿／冰皆可勾）。
