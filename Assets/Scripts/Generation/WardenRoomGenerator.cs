@@ -8,7 +8,9 @@ using UnityEngine.InputSystem;
 
 /// <summary>
 /// 在固定空間內以自由座標生成隨機大小平台，並保證起點到終點可達。
+/// 預設 <see cref="DefaultExecutionOrder"/> 為 40，於 Controller／Winch 之後 Awake，減少與其他系統的競態。
 /// </summary>
+[DefaultExecutionOrder(40)]
 [DisallowMultipleComponent]
 public class WardenRoomGenerator : MonoBehaviour
 {
@@ -73,6 +75,7 @@ public class WardenRoomGenerator : MonoBehaviour
     private static readonly Vector3 FixedStartSize = new Vector3(3f, PlatformThickness, 3f);
 
     private System.Random _rng;
+    private bool _initialGenerateFromAwake;
 
     private struct PlatformData
     {
@@ -82,8 +85,18 @@ public class WardenRoomGenerator : MonoBehaviour
         public MaterialType MaterialType;
     }
 
+    /// <summary>首次生成於 Awake（執行順序 40，晚於多數系統）。</summary>
+    private void Awake()
+    {
+        GenerateMap();
+        _initialGenerateFromAwake = true;
+    }
+
+    /// <summary>若 Awake 未跑完，由 Start 補一次生成。</summary>
     private void Start()
     {
+        if (_initialGenerateFromAwake)
+            return;
         GenerateMap();
     }
 
@@ -95,13 +108,17 @@ public class WardenRoomGenerator : MonoBehaviour
 
     /// <summary>
     /// 使用<strong>新隨機種子</strong>重新執行場景生成（起點／終點、平台列表與材質抽樣）。
-    /// 首次 <see cref="Start"/> 呼叫時亦會換新種子；若需固定首局種子請在生成後於 Inspector 調整流程。
+    /// 首次於 <see cref="Awake"/> 呼叫時亦會換新種子；若需固定首局種子請在生成後於 Inspector 調整流程。
     /// </summary>
     [ContextMenu("Generate Map")]
     public void GenerateMap()
     {
         if (platformPrefab == null)
+        {
+            Debug.LogError(
+                "[WardenRoomGenerator] 未指派 platformPrefab，無法生成地圖。請在場景的 SceneGenerator 上指定平台 Prefab（Build 後若遺失參照也會如此）。");
             return;
+        }
 
         seed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
         _rng = new System.Random(seed);
@@ -210,8 +227,12 @@ public class WardenRoomGenerator : MonoBehaviour
     {
         if (collectionManager == null)
             collectionManager = UnityEngine.Object.FindFirstObjectByType<WardenCollectionManager>();
-        if (collectionManager != null)
-            collectionManager.ResetForNewRun(spawnedPickups);
+        if (collectionManager == null)
+            return;
+        collectionManager.ResetForNewRun(spawnedPickups);
+        // 能量方塊改於 Awake 初始化時不再各自 Register（會早於 Reset）；改由生成端在 Reset 後補登記。
+        for (int i = 0; i < spawnedPickups; i++)
+            collectionManager.RegisterPickup();
     }
 
     /// <summary>與所有平台中心距離皆 &gt; 2m，且與已放方塊中心距離皆 ≥ 2m。</summary>

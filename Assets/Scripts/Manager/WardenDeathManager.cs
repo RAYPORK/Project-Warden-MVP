@@ -47,12 +47,17 @@ public class WardenDeathManager : MonoBehaviour
     [SerializeField] private float gameOverFadeInSeconds = 0.5f;
 
     private bool _isDead;
+
+    /// <summary>是否已進入死亡流程（結算期間含面板淡入前後）。暫停選單等可據此阻擋 ESC。</summary>
+    public bool isDead => _isDead;
+
     private float _sessionStartTime;
     private int _slotSpinCount;
     private float _energyCollectedTotal;
     private Coroutine _fadeRoutine;
 
-    private void Start()
+    /// <summary>改於 Awake：與其他系統一致，避免非同步載入後 <c>Start</c> 延遲導致從未執行。</summary>
+    private void Awake()
     {
         _sessionStartTime = Time.time;
 

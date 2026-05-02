@@ -70,16 +70,13 @@ public class WardenAudioManager : MonoBehaviour
         ConfigureSource2D(_sfxSource, loop: false, sfxMixerGroup);
         ConfigureSource2D(_slotSpinSource, loop: true, sfxMixerGroup);
         ConfigureSource2D(_bgmSource, loop: true, bgmMixerGroup);
-    }
 
-    private void Start()
-    {
-        if (bgmClip == null || _bgmSource == null)
-            return;
-
-        _bgmSource.clip = bgmClip;
-        _bgmSource.loop = true;
-        _bgmSource.Play();
+        if (bgmClip != null && _bgmSource != null)
+        {
+            _bgmSource.clip = bgmClip;
+            _bgmSource.loop = true;
+            _bgmSource.Play();
+        }
     }
 
     private void OnDestroy()

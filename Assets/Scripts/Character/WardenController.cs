@@ -5,6 +5,7 @@ using UnityEngine;
 /// 空中不施加地面移動力，與 <see cref="WardenWinchSystem"/> 的空中 AddForce 分工。
 /// 請掛在 PlayerRig（含 Rigidbody）上，並在 Inspector 指派 Main Camera。
 /// </summary>
+[DefaultExecutionOrder(-100)]
 [RequireComponent(typeof(Rigidbody))]
 public class WardenController : MonoBehaviour
 {
@@ -66,6 +67,13 @@ public class WardenController : MonoBehaviour
     [Tooltip("滑鼠靈敏度乘數")]
     [SerializeField] private float mouseSensitivity = 2f;
 
+    /// <summary>滑鼠視角靈敏度（可由暫停選單或 PlayerPrefs 同步）。</summary>
+    public float MouseSensitivity
+    {
+        get => mouseSensitivity;
+        set => mouseSensitivity = value;
+    }
+
     [Tooltip("俯仰角下限（抬頭）")]
     [SerializeField] private float pitchMin = -80f;
 
@@ -102,11 +110,7 @@ public class WardenController : MonoBehaviour
             if (_pitchAngle > 180f)
                 _pitchAngle -= 360f;
         }
-    }
 
-    /// <summary>遊戲開始即鎖定並隱藏滑鼠。</summary>
-    private void Start()
-    {
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
     }
@@ -114,21 +118,6 @@ public class WardenController : MonoBehaviour
     /// <summary>滑鼠視角在 Update 處理，與幀率無關的體感較穩定。</summary>
     private void Update()
     {
-        // 按 Escape 切換滑鼠鎖定狀態（測試用）
-        if (Input.GetKeyDown(KeyCode.Escape))
-        {
-            if (Cursor.lockState == CursorLockMode.Locked)
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
-            else
-            {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
-        }
-
         ApplyMouseLook();
         if (WardenDevFlyMode.IsFlying)
             return;

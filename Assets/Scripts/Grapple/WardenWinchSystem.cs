@@ -5,6 +5,7 @@ using UnityEngine.Events;
 /// 第一人稱鋼索／捲揚：由主攝影機發射 Raycast，擊中具 <see cref="PlatformType"/> 的水泥／岩漿／冰表面後以 SpringJoint 連線並收線，錨點在命中點附近（沿法線略外推）；
 /// 連線在岩漿上可透過事件扣血、在冰上可減水平速（皆可於 Inspector 調整）。連線期間不套用空中 WASD 加力，僅懸掛與收線。
 /// </summary>
+[DefaultExecutionOrder(-50)]
 [RequireComponent(typeof(Rigidbody))]
 public class WardenWinchSystem : MonoBehaviour
 {

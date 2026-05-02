@@ -79,11 +79,8 @@ public class WardenReelDisplay : MonoBehaviour
             if (_reels[i] != null && _reels[i].content != null)
                 TripleReelContent(_reels[i].content as RectTransform);
         }
-    }
 
-    private void Start()
-    {
-        // 遊戲開始：不啟動滾動，維持 Content 初始 anchoredPosition。
+        // 原 Start：Triple 後校準 Viewport 映射（不依賴下一幀 Start）。
         for (int i = 0; i < ReelCount; i++)
         {
             if (_reels[i] == null || _reels[i].content == null)

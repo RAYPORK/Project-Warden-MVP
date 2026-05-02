@@ -31,7 +31,7 @@ public class WardenEnergyPickup : MonoBehaviour
     [SerializeField] private UnityEvent<float> onCollected = new UnityEvent<float>();
 
     [Header("視覺")]
-    [Tooltip("是否在 Start 時將 MeshRenderer 材質主色設為藍綠色")]
+    [Tooltip("是否在 Awake 時將 MeshRenderer 材質主色設為藍綠色")]
     [SerializeField] private bool applyPickupMaterialColor = true;
 
     [Tooltip("每秒繞世界 Y 軸旋轉角度")]
@@ -41,7 +41,7 @@ public class WardenEnergyPickup : MonoBehaviour
     private WardenEnergyManager _energyManager;
     private WardenCollectionManager _collectionManager;
 
-    private void Start()
+    private void Awake()
     {
         // 若 Inspector 未指派，自動尋找標記為 Player 的物件
         if (player == null)
@@ -51,10 +51,9 @@ public class WardenEnergyPickup : MonoBehaviour
                 player = found.transform;
         }
 
-        // 自動尋找能量管理器（Unity 6 建議使用 FindFirstObjectByType）
         _energyManager = Object.FindFirstObjectByType<WardenEnergyManager>();
         _collectionManager = Object.FindFirstObjectByType<WardenCollectionManager>();
-        _collectionManager?.RegisterPickup();
+        // RegisterPickup 改由 WardenRoomGenerator 在 ResetForNewRun 之後批次呼叫（Awake 時機早於 Reset 會被清零）。
 
         if (applyPickupMaterialColor && TryGetComponent<MeshRenderer>(out var renderer))
             renderer.material.color = PickupColor;

@@ -18,6 +18,7 @@ public class ThreeIntsEvent : UnityEvent<int, int, int> { }
 /// <summary>
 /// 拉霸博弈：F 鍵觸發、消耗能量、三滾輪依序停止後判定結果並觸發對應 UnityEvent 與角色／捲揚數值。
 /// </summary>
+[DefaultExecutionOrder(50)]
 public class WardenSlotSystem : MonoBehaviour
 {
     private const int SymbolCount = 7;
@@ -97,7 +98,7 @@ public class WardenSlotSystem : MonoBehaviour
     [SerializeField] private float overloadEffectDurationSeconds = 5f;
 
     [Header("隨機")]
-    [Tooltip("0 表示於 Start 用時間戳建立非確定性種子")]
+    [Tooltip("0 表示於 Awake 用時間戳建立非確定性種子")]
     [SerializeField] private int randomSeed;
 
     [Header("保底")]
@@ -127,7 +128,7 @@ public class WardenSlotSystem : MonoBehaviour
     private Coroutine _overloadRoutine;
     private Coroutine _forceJackpotReelRoutine;
 
-    /// <summary>大獎還原用：快取於 Start 時的移動速度與繩長上限。</summary>
+    /// <summary>大獎還原用：快取於 Awake 時的移動速度與繩長上限。</summary>
     private float _baselineMoveSpeed;
 
     private float _baselineMaxRopeLength;
@@ -141,14 +142,14 @@ public class WardenSlotSystem : MonoBehaviour
     /// <summary>是否正在轉動（含等待判定）。</summary>
     public bool IsSpinning => _isSpinning;
 
-    private void Start()
+    private void Awake()
     {
         if (randomSeed != 0)
             _rng = new System.Random(randomSeed);
         else
             _rng = new System.Random(Environment.TickCount ^ (GetInstanceID() << 16));
 
-        // 於 Start 快取，確保 WardenController／Winch 已完成 Awake 與 Inspector 數值載入。
+        // DefaultExecutionOrder：Controller／Winch 先於本類 Awake，可安全快取基準值。
         CacheBaselineStats();
     }
 

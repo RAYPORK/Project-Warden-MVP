@@ -48,10 +48,6 @@ public class WardenEnergyManager : MonoBehaviour
     private void Awake()
     {
         _current = Mathf.Clamp(startingEnergy, 0f, maxEnergy);
-    }
-
-    private void Start()
-    {
         onEnergyChanged?.Invoke(_current);
     }
 

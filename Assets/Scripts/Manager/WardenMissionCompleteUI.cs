@@ -30,7 +30,13 @@ public class WardenMissionCompleteUI : MonoBehaviour
     [Tooltip("再試一次：建議綁定 WardenDeathManager.RestartRunAfterMissionComplete")]
     [SerializeField] private UnityEvent onTryAgain = new UnityEvent();
 
-    private void Start()
+    /// <summary>任務完成面板是否正在顯示（阻擋暫停選單等）。</summary>
+    public bool IsMissionCompletePanelVisible =>
+        missionCompletePanel != null &&
+        missionCompletePanel.alpha >= 0.99f &&
+        missionCompletePanel.blocksRaycasts;
+
+    private void Awake()
     {
         if (missionCompletePanel != null)
         {

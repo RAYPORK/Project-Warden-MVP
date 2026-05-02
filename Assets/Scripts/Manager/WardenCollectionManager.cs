@@ -46,7 +46,7 @@ public class WardenCollectionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 每個 <see cref="WardenEnergyPickup"/> 於 <c>Start</c> 呼叫；總數仍以 <see cref="ResetForNewRun"/> 為準，此處僅累計登記數。
+    /// 累計已登記方塊數；總數以 <see cref="ResetForNewRun"/> 為準。執行時由 <see cref="WardenRoomGenerator"/> 在 Reset 後依生成數批次呼叫。
     /// </summary>
     public void RegisterPickup()
     {

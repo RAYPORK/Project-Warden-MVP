@@ -39,10 +39,6 @@ public class WardenHealthManager : MonoBehaviour
     {
         ClampSettings();
         _currentHealth = Mathf.Clamp(startingHealth, 0f, maxHealth);
-    }
-
-    private void Start()
-    {
         RaiseHealthChanged();
     }
 
