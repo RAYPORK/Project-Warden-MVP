@@ -42,6 +42,13 @@ public class WardenController : MonoBehaviour
     [Tooltip("冰上鬆開 WASD 時水平速度每秒衰減（數值愈小愈滑、愈難煞停）。")]
     [SerializeField] private float iceNoInputHorizontalBrakePerSecond = 0.85f;
 
+    [Header("岩漿血量")]
+    [Tooltip("站在岩漿上時扣血所呼叫的血量管理器")]
+    [SerializeField] private WardenHealthManager healthManager;
+
+    [Tooltip("站在岩漿上時每秒承受傷害（與 Time.fixedDeltaTime 相乘；Inspector 可調）")]
+    [SerializeField] private float lavaDamagePerSecond = 10f;
+
     [Header("地面偵測")]
     [Tooltip("射線起點：相對於 PlayerRig 的局部座標，應在角色底部附近")]
     [SerializeField] private Vector3 groundRayLocalStart = new Vector3(0f, -0.9f, 0f);
@@ -71,12 +78,22 @@ public class WardenController : MonoBehaviour
     /// <summary>腳底射線使用的完整遮罩（主 Ground + 額外可立足表面）。</summary>
     private int FootSurfaceMask => groundLayer.value | extraFootContactLayers.value;
 
+    /// <summary>若未在 Inspector 指派血量管理器，於執行時尋找場景中的實例（Unity 6：FindFirstObjectByType）。</summary>
+    private void EnsureHealthManagerReference()
+    {
+        if (healthManager != null)
+            return;
+        healthManager = Object.FindFirstObjectByType<WardenHealthManager>();
+    }
+
     /// <summary>初始化 Rigidbody、鎖定游標，並快取攝影機初始俯仰。</summary>
     private void Awake()
     {
         _rb = GetComponent<Rigidbody>();
         // 由程式控制旋轉，避免物理扭力與視角打架。
         _rb.freezeRotation = true;
+
+        EnsureHealthManagerReference();
 
         if (mainCamera != null)
         {
@@ -138,6 +155,13 @@ public class WardenController : MonoBehaviour
     {
         if (!TryGetGroundMaterial(out MaterialType surface))
             return;
+
+        // Inspector 未指派時自動尋找（與 WardenEnergyPickup 等一致），避免岩漿不扣血
+        EnsureHealthManagerReference();
+
+        // 腳底為岩漿時持續扣血（含站立不動），與每秒傷害及物理固定時間步一致
+        if (surface == MaterialType.Lava && healthManager != null)
+            healthManager.TakeDamage(lavaDamagePerSecond * Time.fixedDeltaTime);
 
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");

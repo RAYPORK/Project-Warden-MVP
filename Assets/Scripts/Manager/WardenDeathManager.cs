@@ -126,7 +126,7 @@ public class WardenDeathManager : MonoBehaviour
         _energyCollectedTotal += amount;
     }
 
-    private void BeginDeathSequence()
+    public void BeginDeathSequence()
     {
         _isDead = true;
 
@@ -225,6 +225,11 @@ public class WardenDeathManager : MonoBehaviour
 
         if (energyManager != null)
             energyManager.RestoreFullEnergy();
+
+        // 重開時補滿血量（與能量補滿同一步驟；Unity 6 使用 FindFirstObjectByType）
+        WardenHealthManager healthManager = Object.FindFirstObjectByType<WardenHealthManager>();
+        if (healthManager != null)
+            healthManager.RestoreFullHealth();
 
         if (slotSystem != null)
             slotSystem.ResetForNewRun();
