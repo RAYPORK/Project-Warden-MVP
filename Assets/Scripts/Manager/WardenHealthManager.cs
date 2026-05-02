@@ -5,7 +5,7 @@ using UnityEngine.Events;
 /// <summary>
 /// 岩漿等傷害來源可透過 Inspector 綁定 <see cref="TakeDamage"/>（float）；
 /// 血量變化綁定 <see cref="onHealthChanged"/> 供 HUD Slider；歸零時觸發 <see cref="onDeath"/>（僅一次），
-/// <see cref="RestoreFullHealth"/> 用於重開補滿並重置死亡標記。
+/// <see cref="RestoreFullHealth"/> 用於重開補滿並重置死亡標記；<see cref="SetInvincible"/> 可暫停承受傷害。
 /// </summary>
 public class WardenHealthManager : MonoBehaviour
 {
@@ -32,6 +32,9 @@ public class WardenHealthManager : MonoBehaviour
     // 本輪是否已觸發過 onDeath（歸零僅觸發一次；RestoreFullHealth 會清除）
     private bool _deathTriggered;
 
+    // 無敵時略過扣血（例如過載無敵，由外部呼叫 SetInvincible）
+    private bool _isInvincible = false;
+
     private void Awake()
     {
         ClampSettings();
@@ -43,9 +46,12 @@ public class WardenHealthManager : MonoBehaviour
         RaiseHealthChanged();
     }
 
-    /// <summary>造成傷害（例如岩漿 UnityEvent 綁定此方法）。</summary>
+    /// <summary>造成傷害（例如岩漿 UnityEvent 綁定此方法）；無敵時不扣血。</summary>
     public void TakeDamage(float amount)
     {
+        if (_isInvincible)
+            return;
+
         if (amount <= 0f || _deathTriggered)
             return;
 
@@ -58,6 +64,15 @@ public class WardenHealthManager : MonoBehaviour
             onDeath?.Invoke();
         }
     }
+
+    /// <summary>設定無敵：為 true 時 <see cref="TakeDamage"/> 直接返回（不扣血、不觸發死亡）。</summary>
+    public void SetInvincible(bool invincible)
+    {
+        _isInvincible = invincible;
+    }
+
+    /// <summary>是否處於無敵（其他系統可據此略過非扣血類懲罰，例如冰面減速）。</summary>
+    public bool IsInvincible => _isInvincible;
 
     /// <summary>補滿血量並重置死亡標記（重開／再試一次時呼叫）。</summary>
     public void RestoreFullHealth()

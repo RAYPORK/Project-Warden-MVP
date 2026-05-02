@@ -53,12 +53,6 @@ public class WardenMissionCompleteUI : MonoBehaviour
     public void ShowMissionComplete(float elapsedSeconds)
     {
         string formatted = WardenLeaderboard.FormatTimeMmSsFf(elapsedSeconds);
-        Debug.Log(
-            $"[MissionComplete] ShowMissionComplete elapsedSeconds={elapsedSeconds} (invoked on {name}), " +
-            $"formatted={formatted}, timeTextAssigned={timeText != null}");
-
-        if (timeText == null)
-            Debug.LogWarning("[MissionComplete] timeText is not assigned; the TIME label will keep its scene default.");
 
         if (missionCompletePanel != null)
         {

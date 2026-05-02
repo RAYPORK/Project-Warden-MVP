@@ -93,8 +93,6 @@ public class WardenDevFlyMode : MonoBehaviour
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
         }
-
-        Debug.Log("[WardenDevFlyMode] 空中飛人：開（再按 " + toggleFlyKey + " 或呼叫 ToggleFly 關閉）");
     }
 
     private void ExitFly()
@@ -108,8 +106,6 @@ public class WardenDevFlyMode : MonoBehaviour
 
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
-
-        Debug.Log("[WardenDevFlyMode] 空中飛人：關");
     }
 
     private void ApplyFlyMovement()

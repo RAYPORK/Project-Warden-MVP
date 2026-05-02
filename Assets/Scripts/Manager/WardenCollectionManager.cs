@@ -37,7 +37,6 @@ public class WardenCollectionManager : MonoBehaviour
     /// </summary>
     public void ResetForNewRun(int newTotalCount)
     {
-        Debug.Log($"[Collection] 重置，總數：{newTotalCount}");
         _allCollectedFired = false;
         _registeredPickups = 0;
         _totalPickups = Mathf.Max(0, newTotalCount);
@@ -47,7 +46,7 @@ public class WardenCollectionManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 每個 <see cref="WardenEnergyPickup"/> 於 <c>Start</c> 呼叫；總數仍以 <see cref="ResetForNewRun"/> 為準，此處僅累計登記數供除錯。
+    /// 每個 <see cref="WardenEnergyPickup"/> 於 <c>Start</c> 呼叫；總數仍以 <see cref="ResetForNewRun"/> 為準，此處僅累計登記數。
     /// </summary>
     public void RegisterPickup()
     {
@@ -57,7 +56,6 @@ public class WardenCollectionManager : MonoBehaviour
     /// <summary>方塊被玩家收集時呼叫。</summary>
     public void OnPickupCollected()
     {
-        Debug.Log($"[Collection] 收集：{_collectedPickups} / {_totalPickups}");
         if (_allCollectedFired)
             return;
         if (_totalPickups <= 0)
@@ -72,7 +70,6 @@ public class WardenCollectionManager : MonoBehaviour
         {
             _allCollectedFired = true;
             float elapsed = Mathf.Max(0f, Time.time - _runStartTime);
-            Debug.Log($"[Collection] 全部收集完畢，經過時間：{elapsed}");
             onAllCollected?.Invoke(elapsed);
         }
     }

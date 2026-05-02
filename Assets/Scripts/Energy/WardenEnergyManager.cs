@@ -84,7 +84,6 @@ public class WardenEnergyManager : MonoBehaviour
     {
         _current = Mathf.Clamp(value, 0f, maxEnergy);
         onEnergyChanged?.Invoke(_current);
-        Debug.Log($"[Energy] 當前能量：{_current} / {maxEnergy}");
     }
 
 #if UNITY_EDITOR

@@ -167,12 +167,7 @@ public class WardenReelDisplay : MonoBehaviour
         if (content.childCount >= PhysicalSymbolCount)
             return;
         if (content.childCount != LogicalSymbolCount)
-        {
-            Debug.LogWarning(
-                $"[WardenReelDisplay] Content 需恰好 {LogicalSymbolCount} 個子物件才會自動三聯化，目前為 {content.childCount}。",
-                this);
             return;
-        }
 
         var originals = new RectTransform[LogicalSymbolCount];
         for (int s = 0; s < LogicalSymbolCount; s++)

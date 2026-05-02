@@ -101,10 +101,7 @@ public class WardenRoomGenerator : MonoBehaviour
     public void GenerateMap()
     {
         if (platformPrefab == null)
-        {
-            Debug.LogError("WardenRoomGenerator: 請先指定 platformPrefab。");
             return;
-        }
 
         seed = UnityEngine.Random.Range(int.MinValue, int.MaxValue);
         _rng = new System.Random(seed);
@@ -171,11 +168,7 @@ public class WardenRoomGenerator : MonoBehaviour
     private int SpawnEnergyPickups(List<PlatformData> platforms)
     {
         if (energyPickupPrefab == null)
-        {
-            if (energyPickupCount > 0)
-                Debug.LogWarning("[WardenRoomGenerator] 未指定 energyPickupPrefab，已跳過能量方塊生成。", this);
             return 0;
-        }
 
         if (energyPickupCount <= 0)
             return 0;
@@ -206,12 +199,7 @@ public class WardenRoomGenerator : MonoBehaviour
             }
 
             if (!placed)
-            {
-                Debug.LogWarning(
-                    $"[WardenRoomGenerator] 能量方塊第 {i} 個在 {EnergyPickupMaxAttemptsPerItem} 次嘗試後仍無合適位置，已停止後續生成。",
-                    this);
                 break;
-            }
         }
 
         return spawnedCenters.Count;

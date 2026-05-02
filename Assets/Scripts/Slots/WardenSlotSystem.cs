@@ -71,7 +71,9 @@ public class WardenSlotSystem : MonoBehaviour
     [Tooltip("每個滾輪鎖定時：(滾輪索引 0–2, 符號 0–6)")]
     [SerializeField] private ReelIndexSymbolEvent onReelLocked = new ReelIndexSymbolEvent();
 
-    [Tooltip("三個滾輪皆停止後，最終符號 (a,b,c)")]
+    [Tooltip(
+        "三個滾輪皆停止後，最終符號 (a,b,c)。若綁定無參數方法（例如 WardenAudioManager.StopSlotSpinNoParam），" +
+        "請在 Inspector 選 Static Parameters，勿用 Dynamic（事件有三個 int，但該方法不需參數）。")]
     [SerializeField] private ThreeIntsEvent onAllReelsStopped = new ThreeIntsEvent();
 
     [Tooltip("拉霸成功扣能量後立即呼叫（可綁定 WardenReelDisplay.StartSpinning）")]
@@ -108,12 +110,22 @@ public class WardenSlotSystem : MonoBehaviour
     [Tooltip("能量不足時播放")]
     [SerializeField] private AudioClip insufficientEnergyClip;
 
+    [Header("開發測試")]
+    [Tooltip("啟用後按 G 鍵強制觸發大獎（測試用）")]
+    [SerializeField]
+    private bool enableJackpotTestKey = false;
+
+    [Tooltip("啟用後按 H 鍵強制觸發過載（測試用）")]
+    [SerializeField]
+    private bool enableOverloadTestKey = false;
+
     private System.Random _rng;
     private bool _isSpinning;
     private int _pityLossStreak;
     private Coroutine _spinRoutine;
     private Coroutine _jackpotRestoreRoutine;
     private Coroutine _overloadRoutine;
+    private Coroutine _forceJackpotReelRoutine;
 
     /// <summary>大獎還原用：快取於 Start 時的移動速度與繩長上限。</summary>
     private float _baselineMoveSpeed;
@@ -149,6 +161,14 @@ public class WardenSlotSystem : MonoBehaviour
     {
         if (Input.GetKeyDown(KeyCode.F))
             TryStartSlotSpin();
+
+        // 開發：G 鍵模擬大獎（須啟用 enableJackpotTestKey）。
+        if (enableJackpotTestKey && Input.GetKeyDown(KeyCode.G))
+            ForceJackpot();
+
+        // 開發：H 鍵模擬過載（須啟用 enableOverloadTestKey）。
+        if (enableOverloadTestKey && Input.GetKeyDown(KeyCode.H))
+            ForceOverload();
     }
 
     /// <summary>場景中元件數值變更後若要重抓基準，可呼叫（通常不必）。</summary>
@@ -160,16 +180,108 @@ public class WardenSlotSystem : MonoBehaviour
             _baselineMaxRopeLength = winchSystem.MaxRopeLength;
     }
 
+    /// <summary>
+    /// 強制大獎（不扣能量）：符號設為 0-0-0（非過載）、觸發獎勵與滾輪 UI 用事件時序。
+    /// Editor 右鍵「Force Jackpot」或 <see cref="enableJackpotTestKey"/> + G 鍵。
+    /// </summary>
+    [ContextMenu("Force Jackpot")]
+    public void ForceJackpot()
+    {
+        // 一般拉霸進行中不疊加，避免雙重協程與狀態錯亂。
+        if (_isSpinning)
+            return;
+
+        // 強制三連相同且非過載符號（過載為索引 6）。
+        _finalSymbols[0] = 0;
+        _finalSymbols[1] = 0;
+        _finalSymbols[2] = 0;
+
+        onJackpot?.Invoke();
+        ApplyJackpotBuff();
+        onReelDisplaySpinStart?.Invoke();
+
+        if (_forceJackpotReelRoutine != null)
+            StopCoroutine(_forceJackpotReelRoutine);
+
+        _isSpinning = true;
+        _forceJackpotReelRoutine = StartCoroutine(ForceJackpotReelSequence());
+    }
+
+    /// <summary>依正式拉霸的延遲依序觸發鎖定／全停事件（僅供強制大獎測試）。</summary>
+    private IEnumerator ForceJackpotReelSequence()
+    {
+        yield return new WaitForSeconds(reel1StopDelay);
+        onReelLocked?.Invoke(0, 0);
+
+        yield return new WaitForSeconds(reel2StopDelay - reel1StopDelay);
+        onReelLocked?.Invoke(1, 0);
+
+        yield return new WaitForSeconds(reel3StopDelay - reel2StopDelay);
+        onReelLocked?.Invoke(2, 0);
+
+        onAllReelsStopped?.Invoke(0, 0, 0);
+
+        _isSpinning = false;
+        _forceJackpotReelRoutine = null;
+    }
+
+    /// <summary>
+    /// 強制過載（不扣能量）：符號 6-6-6、觸發過載事件與計時協程，並模擬滾輪鎖定／全停 UI 時序。
+    /// Editor 右鍵「Force Overload」或 <see cref="enableOverloadTestKey"/> + H 鍵。
+    /// </summary>
+    [ContextMenu("Force Overload")]
+    public void ForceOverload()
+    {
+        // 一般拉霸或強制大獎滾輪動畫進行中不疊加。
+        if (_isSpinning)
+            return;
+
+        // 過載符號為索引 OverloadSymbolIndex（7-7-7 對應之符號）。
+        _finalSymbols[0] = OverloadSymbolIndex;
+        _finalSymbols[1] = OverloadSymbolIndex;
+        _finalSymbols[2] = OverloadSymbolIndex;
+
+        onOverload?.Invoke();
+        onOverloadEnergyClear?.Invoke();
+
+        if (_overloadRoutine != null)
+            StopCoroutine(_overloadRoutine);
+        _overloadRoutine = StartCoroutine(OverloadTimedEvents());
+
+        onReelDisplaySpinStart?.Invoke();
+
+        if (_forceJackpotReelRoutine != null)
+            StopCoroutine(_forceJackpotReelRoutine);
+
+        _isSpinning = true;
+        _forceJackpotReelRoutine = StartCoroutine(ForceOverloadReelSequence());
+    }
+
+    /// <summary>依正式拉霸延遲觸發過載符號之鎖定／全停事件（僅供強制過載測試）。</summary>
+    private IEnumerator ForceOverloadReelSequence()
+    {
+        yield return new WaitForSeconds(reel1StopDelay);
+        onReelLocked?.Invoke(0, OverloadSymbolIndex);
+
+        yield return new WaitForSeconds(reel2StopDelay - reel1StopDelay);
+        onReelLocked?.Invoke(1, OverloadSymbolIndex);
+
+        yield return new WaitForSeconds(reel3StopDelay - reel2StopDelay);
+        onReelLocked?.Invoke(2, OverloadSymbolIndex);
+
+        onAllReelsStopped?.Invoke(OverloadSymbolIndex, OverloadSymbolIndex, OverloadSymbolIndex);
+
+        _isSpinning = false;
+        _forceJackpotReelRoutine = null;
+    }
+
     private void TryStartSlotSpin()
     {
         if (_isSpinning)
             return;
 
         if (energyManager == null)
-        {
-            Debug.LogWarning("[WardenSlotSystem] 未指派 WardenEnergyManager。", this);
             return;
-        }
 
         if (energyManager.CurrentEnergy < spinEnergyCost)
         {
@@ -283,7 +395,6 @@ public class WardenSlotSystem : MonoBehaviour
 
     private void ApplyOutcome(SlotOutcome outcome)
     {
-        Debug.Log($"[Slot] 結果：{outcome}，符號：{_finalSymbols[0]}-{_finalSymbols[1]}-{_finalSymbols[2]}");
         switch (outcome)
         {
             case SlotOutcome.Jackpot:
@@ -356,6 +467,12 @@ public class WardenSlotSystem : MonoBehaviour
             _spinRoutine = null;
         }
 
+        if (_forceJackpotReelRoutine != null)
+        {
+            StopCoroutine(_forceJackpotReelRoutine);
+            _forceJackpotReelRoutine = null;
+        }
+
         _isSpinning = false;
     }
 
@@ -368,6 +485,12 @@ public class WardenSlotSystem : MonoBehaviour
         {
             StopCoroutine(_spinRoutine);
             _spinRoutine = null;
+        }
+
+        if (_forceJackpotReelRoutine != null)
+        {
+            StopCoroutine(_forceJackpotReelRoutine);
+            _forceJackpotReelRoutine = null;
         }
     }
 

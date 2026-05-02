@@ -17,6 +17,10 @@ public class WardenDeathManager : MonoBehaviour
     [SerializeField] private WardenRoomGenerator roomGenerator;
     [SerializeField] private WardenSlotSystem slotSystem;
 
+    [Tooltip("大獎／過載倒數 HUD；死亡時停止倒數，重開時清空顯示")]
+    [SerializeField]
+    private WardenBuffTimerHUD buffTimerHUD;
+
     [Header("掉落虛空")]
     [Tooltip("玩家此 Transform 的世界 Y 低於此值時判定死亡（例如 -20）")]
     [SerializeField] private float fallDeathY = -20f;
@@ -130,6 +134,10 @@ public class WardenDeathManager : MonoBehaviour
     {
         _isDead = true;
 
+        // 停止大獎／過載共用倒數協程並清空文字，避免結算期間仍閃爍或疊字。
+        if (buffTimerHUD != null)
+            buffTimerHUD.StopAllTimers();
+
         // 死亡時解鎖游標讓玩家能點擊 UI
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -233,6 +241,10 @@ public class WardenDeathManager : MonoBehaviour
 
         if (slotSystem != null)
             slotSystem.ResetForNewRun();
+
+        // 與 StopAllTimers 等價：確保 buff 倒數 TMP 清空、協程已停（新一局乾淨狀態）。
+        if (buffTimerHUD != null)
+            buffTimerHUD.ResetHUD();
 
         if (winchSystem != null)
             winchSystem.ForceDisconnectIfConnected();

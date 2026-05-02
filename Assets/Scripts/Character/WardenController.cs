@@ -114,6 +114,21 @@ public class WardenController : MonoBehaviour
     /// <summary>滑鼠視角在 Update 處理，與幀率無關的體感較穩定。</summary>
     private void Update()
     {
+        // 按 Escape 切換滑鼠鎖定狀態（測試用）
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if (Cursor.lockState == CursorLockMode.Locked)
+            {
+                Cursor.lockState = CursorLockMode.None;
+                Cursor.visible = true;
+            }
+            else
+            {
+                Cursor.lockState = CursorLockMode.Locked;
+                Cursor.visible = false;
+            }
+        }
+
         ApplyMouseLook();
         if (WardenDevFlyMode.IsFlying)
             return;
@@ -191,6 +206,14 @@ public class WardenController : MonoBehaviour
     {
         if (!TryGetGroundMaterial(out MaterialType surface))
             return;
+
+        // 無敵時略過冰面鬆鍵水平減速（與過載無敵等玩法一致）；岩漿扣血仍由 TakeDamage 內部處理。
+        if (surface == MaterialType.Ice)
+        {
+            EnsureHealthManagerReference();
+            if (healthManager != null && healthManager.IsInvincible)
+                return;
+        }
 
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");

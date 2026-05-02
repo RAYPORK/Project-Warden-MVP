@@ -91,6 +91,13 @@ public class WardenEnergyPickup : MonoBehaviour
 
             _collectionManager?.OnPickupCollected();
             onCollected?.Invoke(energyAmount);
+
+            // 收集成功：播放能量收集音效（於 Destroy 前尋找單例，避免本物件銷毀後無法觸發）。
+            WardenAudioManager audioManager =
+                Object.FindFirstObjectByType<WardenAudioManager>();
+            if (audioManager != null)
+                audioManager.PlayEnergyCollect();
+
             Destroy(gameObject);
         }
     }

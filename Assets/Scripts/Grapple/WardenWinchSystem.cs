@@ -101,6 +101,10 @@ public class WardenWinchSystem : MonoBehaviour
     [Tooltip("FOV 朝目標逼近的平滑係數（每秒）")]
     [SerializeField] private float fovLerpSpeed = 8f;
 
+    [Header("鋼索事件")]
+    [Tooltip("鋼索成功發射並建立連線後觸發（可綁定音效／特效等）")]
+    [SerializeField] private UnityEvent onGrappleLaunched = new UnityEvent();
+
     [Header("繩索材質效果（連線中）")]
     [Tooltip("鋼索錨在岩漿表面時，每秒基準傷害（會乘上 FixedUpdate 步長後傳給下方事件）。")]
     [SerializeField] private float lavaGrappleDamagePerSecond = 8f;
@@ -111,6 +115,11 @@ public class WardenWinchSystem : MonoBehaviour
     [Tooltip("鋼索錨在冰表面時，水平線速度每秒額外衰減係數（愈大愈黏、愈難甩盪）。")]
     [SerializeField] private float iceGrappleHorizontalSlowdownPerSecond = 4f;
 
+    [Header("血量（無敵判定）")]
+    [Tooltip("冰面鋼索水平減速是否略過；未指派時於執行時尋找 WardenHealthManager")]
+    [SerializeField]
+    private WardenHealthManager healthManager;
+
     private Rigidbody _rb;
     private SpringJoint _joint;
     private GameObject _anchorObject;
@@ -119,6 +128,14 @@ public class WardenWinchSystem : MonoBehaviour
     private Collider[] _playerColliders;
     private Collider[] _ignoredSurfaceColliders;
     private MaterialType _grappleSurfaceMaterial;
+
+    /// <summary>若未在 Inspector 指派血量管理器，於執行時尋找（與 WardenController 一致）。</summary>
+    private void EnsureHealthManagerReference()
+    {
+        if (healthManager != null)
+            return;
+        healthManager = Object.FindFirstObjectByType<WardenHealthManager>();
+    }
 
     /// <summary>快取 Rigidbody／主攝影機，並先關閉繩索視覺。</summary>
     private void Awake()
@@ -232,6 +249,9 @@ public class WardenWinchSystem : MonoBehaviour
 
         if (lineRenderer != null)
             lineRenderer.enabled = true;
+
+        // 連線已建立：通知監聽者（例如 WardenAudioManager.PlayGrappleLaunch）。
+        onGrappleLaunched?.Invoke();
     }
 
     private static bool IsGrappleAllowedOn(MaterialType type)
@@ -343,6 +363,11 @@ public class WardenWinchSystem : MonoBehaviour
     /// <summary>冰上連線時對水平速度做指數衰減，模擬繩與冰面阻力。</summary>
     private void ApplyIceGrappleHorizontalSlowdown()
     {
+        // 無敵時略過冰面水平減速；岩漿傷害仍由 onLavaGrappleDamage → TakeDamage 內部處理。
+        EnsureHealthManagerReference();
+        if (healthManager != null && healthManager.IsInvincible)
+            return;
+
         Vector3 v = _rb.linearVelocity;
         Vector3 horiz = new Vector3(v.x, 0f, v.z);
         if (horiz.sqrMagnitude < 1e-8f)
