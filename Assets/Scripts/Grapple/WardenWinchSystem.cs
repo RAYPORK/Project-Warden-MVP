@@ -4,6 +4,7 @@ using UnityEngine.Events;
 /// <summary>
 /// 第一人稱鋼索／捲揚：由主攝影機發射 Raycast，擊中具 <see cref="PlatformType"/> 的水泥／岩漿／冰表面後以 SpringJoint 連線並收線，錨點在命中點附近（沿法線略外推）；
 /// 連線在岩漿上可透過事件扣血、在冰上可減水平速（皆可於 Inspector 調整）。連線期間不套用空中 WASD 加力，僅懸掛與收線。
+/// 所有 <see cref="Physics.Raycast"/> 皆帶 <see cref="QueryTriggerInteraction.Ignore"/>，避免僅作觸發用的 Collider（例如風扇、能量方塊）擋住鋼索或著地射線。
 /// </summary>
 [DefaultExecutionOrder(-50)]
 [RequireComponent(typeof(Rigidbody))]
@@ -135,7 +136,7 @@ public class WardenWinchSystem : MonoBehaviour
     {
         if (healthManager != null)
             return;
-        healthManager = Object.FindFirstObjectByType<WardenHealthManager>();
+        healthManager = UnityEngine.Object.FindFirstObjectByType<WardenHealthManager>();
     }
 
     /// <summary>快取 Rigidbody／主攝影機，並先關閉繩索視覺。</summary>
@@ -219,7 +220,7 @@ public class WardenWinchSystem : MonoBehaviour
         if (playerCamera == null || winchExitPoint == null)
             return;
 
-        // 自視野中心發射，最大距離即初始繩長上限。
+        // 自視野中心發射，最大距離即初始繩長上限。Ignore Trigger：不命中 Is Trigger 碰撞器，避免風扇等障礙誤擋鋼索。
         Ray ray = playerCamera.ViewportPointToRay(new Vector3(0.5f, 0.5f, 0f));
         if (!Physics.Raycast(ray, out RaycastHit hit, maxRopeLength, grappleLayers, QueryTriggerInteraction.Ignore))
             return;
@@ -242,7 +243,14 @@ public class WardenWinchSystem : MonoBehaviour
         float ropeLen = Vector3.Distance(winchExitPoint.position, anchorWorld);
         ropeLen = Mathf.Clamp(ropeLen, minRopeLength, maxRopeLength);
 
-        CreateAnchor(anchorWorld);
+        // 將 Anchor 掛在命中碰撞器下，斷線時可自父層取得 CollapsiblePlatform；移動平台時錨點隨表面移動。
+        CreateAnchor(anchorWorld, hit.collider.transform);
+
+        // 碎裂平台：成功建立 Anchor 後開始倒數（已倒數中再次勾住不會重置，見 CollapsiblePlatform）。
+        CollapsiblePlatform collapsible = hit.collider.GetComponentInParent<CollapsiblePlatform>();
+        if (collapsible != null)
+            collapsible.OnGrappleAttached();
+
         AttachSpringJoint(ropeLen);
         _currentRopeLength = ropeLen;
         _connected = true;
@@ -260,14 +268,16 @@ public class WardenWinchSystem : MonoBehaviour
         return type == MaterialType.Concrete || type == MaterialType.Lava || type == MaterialType.Ice;
     }
 
-    /// <summary>在擊中點建立空物件作為錨點（視覺與邏輯參考）。</summary>
-    private void CreateAnchor(Vector3 worldHit)
+    /// <summary>在擊中點建立空物件作為錨點（視覺與邏輯參考）；可選掛在命中表面下以利碎裂平台等邏輯。</summary>
+    private void CreateAnchor(Vector3 worldHit, Transform surfaceParent)
     {
         if (_anchorObject != null)
             Destroy(_anchorObject);
 
         _anchorObject = new GameObject("WinchAnchor");
         _anchorObject.transform.position = worldHit;
+        if (surfaceParent != null)
+            _anchorObject.transform.SetParent(surfaceParent, true);
     }
 
     /// <summary>於角色上新增 SpringJoint：連至場景錨點，並套用指定 Spring／Damper／碰撞。</summary>
@@ -328,6 +338,11 @@ public class WardenWinchSystem : MonoBehaviour
 
         if (_anchorObject != null)
         {
+            // 碎裂平台：切斷鋼索時停止倒數並還原外觀（須在銷毀 Anchor 前自父層查組件）。
+            CollapsiblePlatform collapsible = _anchorObject.GetComponentInParent<CollapsiblePlatform>();
+            if (collapsible != null)
+                collapsible.OnGrappleDetached();
+
             Destroy(_anchorObject);
             _anchorObject = null;
         }
@@ -541,7 +556,7 @@ public class WardenWinchSystem : MonoBehaviour
         _rb.AddForce(wish * airControlForce, ForceMode.Acceleration);
     }
 
-    /// <summary>向下短射線未撞到地面層則視為空中。</summary>
+    /// <summary>向下短射線未撞到地面層則視為空中；同樣忽略 Trigger，以免空中判定被觸發體誤判為著地。</summary>
     private bool IsAirborne()
     {
         Vector3 origin = _rb.position;

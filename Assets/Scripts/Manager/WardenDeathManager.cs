@@ -7,7 +7,9 @@ using UnityEngine;
 /// 再試一次時重產地圖（新種子）、補滿能量並重置統計與拉霸狀態。
 /// 統計建議綁定：<see cref="WardenSlotSystem"/> 的 onReelDisplaySpinStart → <see cref="RegisterSlotSpin"/>；
 /// 各 <see cref="WardenEnergyPickup"/> 的 onCollected → <see cref="RegisterEnergyCollected"/>。
+/// 執行順序晚於 <see cref="WardenDistanceTracker"/>（-100），讓距離先於同一幀的死亡判定更新。
 /// </summary>
+[DefaultExecutionOrder(50)]
 public class WardenDeathManager : MonoBehaviour
 {
     [Header("核心參照")]
@@ -17,13 +19,18 @@ public class WardenDeathManager : MonoBehaviour
     [SerializeField] private WardenRoomGenerator roomGenerator;
     [SerializeField] private WardenSlotSystem slotSystem;
 
+    [Tooltip("最遠 Z 追蹤：死亡時停止、重開時重新 StartTracking")]
+    [SerializeField]
+    private WardenDistanceTracker distanceTracker;
+
     [Tooltip("大獎／過載倒數 HUD；死亡時停止倒數，重開時清空顯示")]
     [SerializeField]
     private WardenBuffTimerHUD buffTimerHUD;
 
     [Header("掉落虛空")]
-    [Tooltip("玩家此 Transform 的世界 Y 低於此值時判定死亡（例如 -20）")]
-    [SerializeField] private float fallDeathY = -20f;
+    [Tooltip("玩家世界 Y 低於此值判定掉落死亡。過於接近 0（例如 -20）時，略低於門檻即觸發；無限跑酷建議 -40～-80。")]
+    [SerializeField]
+    private float fallDeathY = -40f;
 
     [Header("結算 UI（Canvas Group，勿用 SetActive）")]
     [SerializeField] private CanvasGroup gameOverPanel;
@@ -31,10 +38,15 @@ public class WardenDeathManager : MonoBehaviour
     [SerializeField] private TMP_Text survivalTimeText;
     [SerializeField] private TMP_Text slotSpinCountText;
     [SerializeField] private TMP_Text energyCollectedText;
+
+    [Tooltip("死亡結算面板顯示最遠距離")]
+    [SerializeField]
+    private TMP_Text distanceText;
+
     [SerializeField] private UnityEngine.UI.Button tryAgainButton;
 
     [Header("結算 TMP 字型（選填）")]
-    [Tooltip("LiberationSans SDF 不含中文。若場景中這三個 TMP 曾填中文預設字，請改為純數字顯示或在此指派含 CJK 的 Font Asset（例如 Noto／思源黑體 SDF）。")]
+    [Tooltip("LiberationSans SDF 不含中文。若場景中這些數值 TMP 曾填中文預設字，請改為純數字顯示或在此指派含 CJK 的 Font Asset（例如 Noto／思源黑體 SDF）。")]
     [SerializeField] private TMP_FontAsset statsFontWithCjkSupport;
 
     [Header("重開：玩家位置")]
@@ -75,7 +87,7 @@ public class WardenDeathManager : MonoBehaviour
     }
 
     /// <summary>
-    /// 避免場景預設中文與 LiberationSans 衝突：可選套用 CJK 字型，並將三個數值 TMP 改為純 ASCII 佔位（僅數字與冒號）。
+    /// 避免場景預設中文與 LiberationSans 衝突：可選套用 CJK 字型，並將結算用數值 TMP 改為純 ASCII 佔位（僅數字與冒號）。
     /// </summary>
     private void ApplyStatsFontAndAsciiPlaceholders()
     {
@@ -87,6 +99,8 @@ public class WardenDeathManager : MonoBehaviour
                 slotSpinCountText.font = statsFontWithCjkSupport;
             if (energyCollectedText != null)
                 energyCollectedText.font = statsFontWithCjkSupport;
+            if (distanceText != null)
+                distanceText.font = statsFontWithCjkSupport;
         }
 
         ResetHudStatTextsToAsciiPlaceholders();
@@ -100,6 +114,8 @@ public class WardenDeathManager : MonoBehaviour
             slotSpinCountText.text = "SLOTS: 0";
         if (energyCollectedText != null)
             energyCollectedText.text = "ENERGY: 0";
+        if (distanceText != null)
+            distanceText.text = "DISTANCE: 0m";
     }
 
     private void Update()
@@ -143,6 +159,9 @@ public class WardenDeathManager : MonoBehaviour
         if (buffTimerHUD != null)
             buffTimerHUD.StopAllTimers();
 
+        if (distanceTracker != null)
+            distanceTracker.StopTracking();
+
         // 死亡時解鎖游標讓玩家能點擊 UI
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
@@ -178,6 +197,13 @@ public class WardenDeathManager : MonoBehaviour
             slotSpinCountText.text = $"SLOTS: {_slotSpinCount}";
         if (energyCollectedText != null)
             energyCollectedText.text = $"ENERGY: {Mathf.FloorToInt(_energyCollectedTotal)}";
+
+        // 本局最遠 Z（公尺）：於 BeginDeathSequence 內 StopTracking 之前已寫入 tracker，此處僅讀取顯示。
+        if (distanceText != null && distanceTracker != null)
+        {
+            int dist = Mathf.FloorToInt(distanceTracker.GetCurrentDistance());
+            distanceText.text = $"DISTANCE: {dist}m";
+        }
     }
 
     private IEnumerator FadeInGameOverPanel()
@@ -273,6 +299,9 @@ public class WardenDeathManager : MonoBehaviour
         _energyCollectedTotal = 0f;
         _sessionStartTime = Time.time;
         _isDead = false;
+
+        if (distanceTracker != null)
+            distanceTracker.StartTracking();
 
         ResetHudStatTextsToAsciiPlaceholders();
 

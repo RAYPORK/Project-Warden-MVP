@@ -83,6 +83,9 @@ public class WardenController : MonoBehaviour
     private Rigidbody _rb;
     private float _pitchAngle;
 
+    /// <summary>主攝影機未套用碎裂抖動前的局部座標（避免每幀累加後無法還原）。</summary>
+    private Vector3 _cameraBaseLocalPosition;
+
     /// <summary>腳底射線使用的完整遮罩（主 Ground + 額外可立足表面）。</summary>
     private int FootSurfaceMask => groundLayer.value | extraFootContactLayers.value;
 
@@ -105,6 +108,7 @@ public class WardenController : MonoBehaviour
 
         if (mainCamera != null)
         {
+            _cameraBaseLocalPosition = mainCamera.transform.localPosition;
             Vector3 euler = mainCamera.transform.localEulerAngles;
             _pitchAngle = euler.x;
             if (_pitchAngle > 180f)
@@ -131,6 +135,31 @@ public class WardenController : MonoBehaviour
             return;
         ApplyGroundMovement();
         ApplyGroundHorizontalBrakingWhenNoInput();
+    }
+
+    /// <summary>
+    /// 讀取 <see cref="CollapsiblePlatform.CurrentShakeIntensity"/>，在滑鼠視角之後對主鏡頭施加碎裂倒數震動；
+    /// 強度為 0 時將局部座標還原為 Awake 快取之基準，避免位移累積漂移。
+    /// </summary>
+    private void LateUpdate()
+    {
+        ApplyCollapsibleCameraShake();
+    }
+
+    private void ApplyCollapsibleCameraShake()
+    {
+        if (mainCamera == null)
+            return;
+
+        float s = CollapsiblePlatform.CurrentShakeIntensity;
+        if (s <= 0f)
+        {
+            mainCamera.transform.localPosition = _cameraBaseLocalPosition;
+            return;
+        }
+
+        mainCamera.transform.localPosition +=
+            Random.insideUnitSphere * (s * Time.deltaTime * 10f);
     }
 
     /// <summary>
