@@ -160,7 +160,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9912857b0950c345aff0c6ea2e3e105, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rotationSpeed: 40
+  rotationSpeed: 30
   rotationAxis: {x: 0, y: 0, z: 1}
   clockwise: 1
   damageAmount: 0
@@ -245,7 +245,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9912857b0950c345aff0c6ea2e3e105, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rotationSpeed: 40
+  rotationSpeed: 30
   rotationAxis: {x: 0, y: 0, z: 1}
   clockwise: 1
   damageAmount: 0
@@ -290,7 +290,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9912857b0950c345aff0c6ea2e3e105, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rotationSpeed: 40
+  rotationSpeed: 30
   rotationAxis: {x: 0, y: 0, z: 1}
   clockwise: 1
   damageAmount: 0
@@ -375,7 +375,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b9912857b0950c345aff0c6ea2e3e105, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  rotationSpeed: 40
+  rotationSpeed: 30
   rotationAxis: {x: 0, y: 0, z: 1}
   clockwise: 1
   damageAmount: 0

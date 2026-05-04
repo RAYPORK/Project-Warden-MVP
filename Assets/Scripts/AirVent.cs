@@ -2,7 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// 氣流噴射口：開局隨機擇一軸向為噴射方向，週期性在噴射／停止之間切換；
+/// 氣流噴射口：開局隨機擇一軸向為噴射方向，週期性在噴射／停止之間切換（可勾選 <see cref="alwaysActive"/> 改為永遠噴射、不切換）；
 /// 噴射中玩家位於 Trigger 內時，沿該方向以加速度模式推動 Rigidbody，不造成傷害。
 /// 可掛在根物件：若 Trigger Collider 在子物件上，執行時會自動加上 <see cref="AirVentTriggerRelay"/> 轉發事件（Unity 只對「帶 Collider 的那顆 GameObject」派送 Trigger）。
 /// </summary>
@@ -29,6 +29,10 @@ public class AirVent : MonoBehaviour
     [Tooltip("進場時是否先處於噴射狀態")]
     [SerializeField]
     private bool startActive = true;
+
+    [Tooltip("永遠開啟，不切換狀態")]
+    [SerializeField]
+    private bool alwaysActive = false;
 
     [Header("視覺")]
     [Tooltip("箭頭物件；未指派則略過旋轉")]
@@ -62,11 +66,21 @@ public class AirVent : MonoBehaviour
         if (arrowVisual != null)
             arrowVisual.rotation = QuaternionForArrowFacing(pushDirection);
 
-        _isActive = startActive;
-        if (activeEffect != null)
-            activeEffect.SetActive(_isActive);
+        // 永遠開啟：略過 startActive 與相位計時，直接維持噴射狀態
+        if (alwaysActive)
+        {
+            _isActive = true;
+            if (activeEffect != null)
+                activeEffect.SetActive(true);
+        }
+        else
+        {
+            _isActive = startActive;
+            if (activeEffect != null)
+                activeEffect.SetActive(_isActive);
 
-        _phaseRemain = _isActive ? activeDuration : inactiveDuration;
+            _phaseRemain = _isActive ? activeDuration : inactiveDuration;
+        }
 
         EnsureChildTriggerRelays();
     }
@@ -96,6 +110,15 @@ public class AirVent : MonoBehaviour
 
     private void Update()
     {
+        // 永遠開啟：每幀鎖定為噴射中，不執行週期切換
+        if (alwaysActive)
+        {
+            _isActive = true;
+            if (activeEffect != null)
+                activeEffect.SetActive(true);
+            return;
+        }
+
         _phaseRemain -= Time.deltaTime;
         if (_phaseRemain > 0f)
             return;

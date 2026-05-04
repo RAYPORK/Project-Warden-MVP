@@ -175,7 +175,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 834.3643, y: 369.61005, z: -17.779425}
-  m_LocalScale: {x: 2, y: 2, z: 2}
+  m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 1
   m_Children:
   - {fileID: 4666174084258511238}
@@ -197,10 +197,11 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   pushDirection: {x: 0, y: 0, z: 1}
-  pushForce: 80
-  activeDuration: 2
-  inactiveDuration: 2
+  pushForce: 150
+  activeDuration: 999
+  inactiveDuration: 0.01
   startActive: 1
+  alwaysActive: 1
   arrowVisual: {fileID: 8253519341896496324}
   activeEffect: {fileID: 5177028019625608774}
 --- !u!1 &4004716597680457791

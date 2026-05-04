@@ -108,6 +108,52 @@ public class WardenRoomGenerator : MonoBehaviour
     [SerializeField]
     private int orbMaxPerChunk = 3;
 
+    [Header("砲台")]
+    [Tooltip("須含 Turret（及飛彈 Prefab 等）；未指派則不生成")]
+    [SerializeField]
+    private GameObject turretPrefab;
+
+    [Tooltip("沿 Z（區段起點世界 Z）超過此距離後才開始累加砲台出現機率")]
+    [SerializeField]
+    private float turretStartDistance = 100f;
+
+    [Tooltip("最大出現機率（0～1）")]
+    [Range(0f, 1f)]
+    [SerializeField]
+    private float turretMaxChance = 0.3f;
+
+    [Tooltip("機率爬升距離（公尺）；過小時避免除零")]
+    [SerializeField]
+    private float turretRampDistance = 150f;
+
+    [Tooltip("每個區段最多嘗試生成幾個砲台")]
+    [Range(1, 5)]
+    [SerializeField]
+    private int turretMaxPerChunk = 2;
+
+    [Header("雷射柱")]
+    [Tooltip("須含 LaserPillar；未指派則不生成")]
+    [SerializeField]
+    private GameObject laserPillarPrefab;
+
+    [Tooltip("沿 Z（區段起點世界 Z）超過此距離後才開始累加雷射柱出現機率")]
+    [SerializeField]
+    private float laserStartDistance = 100f;
+
+    [Tooltip("最大出現機率（0～1）")]
+    [Range(0f, 1f)]
+    [SerializeField]
+    private float laserMaxChance = 0.4f;
+
+    [Tooltip("機率爬升距離（公尺）；過小時避免除零")]
+    [SerializeField]
+    private float laserRampDistance = 150f;
+
+    [Tooltip("每個區段最多嘗試生成幾根雷射柱")]
+    [Range(1, 10)]
+    [SerializeField]
+    private int laserMaxPerChunk = 3;
+
     [Header("氣流噴射口")]
     [Tooltip("須含 AirVent（及 Trigger 等）；未指派則不生成")]
     [SerializeField]
@@ -176,6 +222,21 @@ public class WardenRoomGenerator : MonoBehaviour
     [SerializeField]
     private WardenDeathManager deathManager;
 
+    [Header("死亡牆加速")]
+    [Tooltip("啟用後死亡牆速度會隨時間增加")]
+    [SerializeField]
+    private bool enableDeathWallAcceleration = true;
+
+    [Tooltip("每秒增加的速度（公尺／秒²）")]
+    [Range(0f, 2f)]
+    [SerializeField]
+    private float deathWallAcceleration = 0.1f;
+
+    [Tooltip("死亡牆速度上限（公尺／秒）")]
+    [Range(1f, 50f)]
+    [SerializeField]
+    private float deathWallMaxSpeed = 20f;
+
     [Header("收集模式")]
     [Tooltip("能量方塊生成完畢後重置進度與計時")]
     [SerializeField] private WardenCollectionManager collectionManager;
@@ -184,8 +245,8 @@ public class WardenRoomGenerator : MonoBehaviour
     [SerializeField] private UnityEvent onMapGenerated;
 
     private const float SpaceY = 40f;
-    private const float MinSize = 1f;
-    private const float MaxSize = 3f;
+    private const float MinSize = 2f;
+    private const float MaxSize = 6f;
     private const float PlatformThickness = 0.5f;
 
     /// <summary>能量方塊與任一平台中心的最小距離（公尺）。</summary>
@@ -201,8 +262,9 @@ public class WardenRoomGenerator : MonoBehaviour
     /// <summary>單一方塊隨機位置最大嘗試次數。</summary>
     private const int EnergyPickupMaxAttemptsPerItem = 200;
 
-    private static readonly Vector3 StartPos = new Vector3(0f, 0f, 0f);
-    private static readonly Vector3 FixedStartSize = new Vector3(3f, PlatformThickness, 3f);
+    // 平台中心往後移，讓平台從 Z=0 往後延伸到 Z=-15
+    private static readonly Vector3 StartPos = new Vector3(0f, 0f, -7f);
+    private static readonly Vector3 FixedStartSize = new Vector3(80f, PlatformThickness, 15f);
 
     private System.Random _rng;
 
@@ -231,6 +293,12 @@ public class WardenRoomGenerator : MonoBehaviour
     /// <summary>本局已生成之電擊球（供重置與死亡牆／玩家後方銷毀）。</summary>
     private readonly List<GameObject> _activeElectricOrbs = new List<GameObject>();
 
+    /// <summary>本局已生成之砲台（供重置與死亡牆／玩家後方銷毀）。</summary>
+    private readonly List<GameObject> _activeTurrets = new List<GameObject>();
+
+    /// <summary>本局已生成之雷射柱（供重置與死亡牆／玩家後方銷毀）。</summary>
+    private readonly List<GameObject> _activeLaserPillars = new List<GameObject>();
+
     /// <summary>本局已生成之氣流噴射口（供重置與死亡牆／玩家後方銷毀）。</summary>
     private readonly List<GameObject> _activeAirVents = new List<GameObject>();
 
@@ -248,6 +316,9 @@ public class WardenRoomGenerator : MonoBehaviour
 
     /// <summary>玩家世界 Z 是否已超過門檻，通過後才開始累計死亡牆延遲與推進時間。</summary>
     private bool _playerHasStartedMoving;
+
+    /// <summary>死亡牆目前沿 +Z 的推進速度（公尺／秒）；開局與重置時等於 <see cref="deathWallSpeed"/>，啟用加速時每幀遞增至上限。</summary>
+    private float _currentDeathWallSpeed;
 
     /// <summary>死亡牆目前世界 Z 位置（供 HUD 等讀取）。</summary>
     public float DeathWallZ => _deathWallZ;
@@ -294,6 +365,7 @@ public class WardenRoomGenerator : MonoBehaviour
 
         // 死亡牆自起點後方偏移開始（預設 -10m）；玩家開始移動並經 deathWallStartDelay 後才向 +Z 推進。
         _deathWallZ = deathWallInitialOffset;
+        _currentDeathWallSpeed = deathWallSpeed;
     }
 
     private void Update()
@@ -323,6 +395,8 @@ public class WardenRoomGenerator : MonoBehaviour
             RecyclePlatformsBehindDeathWall();
             DestroyFanObstaclesBehindDeathWall();
             DestroyElectricOrbsBehindDeathWall();
+            DestroyTurretsBehindDeathWall();
+            DestroyLaserPillarsBehindDeathWall();
             DestroyAirVentsBehindDeathWall();
             DestroyCollapsiblePlatformsBehindDeathWall();
         }
@@ -331,6 +405,8 @@ public class WardenRoomGenerator : MonoBehaviour
             RecyclePlatformsBehindPlayer(pz);
             DestroyFanObstaclesBehindPlayer(pz);
             DestroyElectricOrbsBehindPlayer(pz);
+            DestroyTurretsBehindPlayer(pz);
+            DestroyLaserPillarsBehindPlayer(pz);
             DestroyAirVentsBehindPlayer(pz);
             DestroyCollapsiblePlatformsBehindPlayer(pz);
         }
@@ -348,6 +424,7 @@ public class WardenRoomGenerator : MonoBehaviour
 
     /// <summary>
     /// 偵測玩家是否已開始前進；通過後才累計 <see cref="_deathWallRunTime"/>，超過 <see cref="deathWallStartDelay"/> 再推進 <see cref="_deathWallZ"/>。
+    /// 推進量使用 <see cref="_currentDeathWallSpeed"/>；若 <see cref="enableDeathWallAcceleration"/> 為 true，速度每幀依加速度遞增至 <see cref="deathWallMaxSpeed"/>。
     /// </summary>
     private void UpdateDeathWall()
     {
@@ -367,7 +444,13 @@ public class WardenRoomGenerator : MonoBehaviour
         if (_deathWallRunTime < deathWallStartDelay)
             return;
 
-        _deathWallZ += deathWallSpeed * Time.deltaTime;
+        if (enableDeathWallAcceleration)
+        {
+            _currentDeathWallSpeed += deathWallAcceleration * Time.deltaTime;
+            _currentDeathWallSpeed = Mathf.Min(_currentDeathWallSpeed, deathWallMaxSpeed);
+        }
+
+        _deathWallZ += _currentDeathWallSpeed * Time.deltaTime;
     }
 
     /// <summary>玩家世界 Z 落於死亡牆之後（較小）時觸發結算死亡流程。</summary>
@@ -434,6 +517,46 @@ public class WardenRoomGenerator : MonoBehaviour
             {
                 Destroy(orb);
                 _activeElectricOrbs.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>砲台中心 Z 落於死亡牆之後者銷毀（邏輯同 <see cref="DestroyFanObstaclesBehindDeathWall"/>）。</summary>
+    private void DestroyTurretsBehindDeathWall()
+    {
+        for (int i = _activeTurrets.Count - 1; i >= 0; i--)
+        {
+            GameObject turret = _activeTurrets[i];
+            if (turret == null)
+            {
+                _activeTurrets.RemoveAt(i);
+                continue;
+            }
+
+            if (turret.transform.position.z < _deathWallZ)
+            {
+                Destroy(turret);
+                _activeTurrets.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>雷射柱中心 Z 落於死亡牆之後者銷毀（邏輯同 <see cref="DestroyFanObstaclesBehindDeathWall"/>）。</summary>
+    private void DestroyLaserPillarsBehindDeathWall()
+    {
+        for (int i = _activeLaserPillars.Count - 1; i >= 0; i--)
+        {
+            GameObject pillar = _activeLaserPillars[i];
+            if (pillar == null)
+            {
+                _activeLaserPillars.RemoveAt(i);
+                continue;
+            }
+
+            if (pillar.transform.position.z < _deathWallZ)
+            {
+                Destroy(pillar);
+                _activeLaserPillars.RemoveAt(i);
             }
         }
     }
@@ -512,6 +635,8 @@ public class WardenRoomGenerator : MonoBehaviour
         DestroyEnergyPickupsUnderRoot();
         DestroyAllFanObstacles();
         DestroyAllElectricOrbs();
+        DestroyAllTurrets();
+        DestroyAllLaserPillars();
         DestroyAllAirVents();
         DestroyAllCollapsiblePlatforms();
 
@@ -519,6 +644,7 @@ public class WardenRoomGenerator : MonoBehaviour
         _deathWallZ = deathWallInitialOffset;
         _deathWallRunTime = 0f;
         _playerHasStartedMoving = false;
+        _currentDeathWallSpeed = deathWallSpeed;
 
         chunksGenerated = 0;
         GenerateNextChunk();
@@ -574,6 +700,13 @@ public class WardenRoomGenerator : MonoBehaviour
             if (p.IsStart) go.name = "Platform_Start";
             else go.name = $"Platform_c{chunkIndex}_{i:000}";
 
+            // 起點平台設為 StartPlatform Layer
+            if (p.IsStart)
+            {
+                int startLayer = LayerMask.NameToLayer("StartPlatform");
+                go.layer = startLayer;
+            }
+
             MaterialType type = p.IsStart ? MaterialType.Concrete : p.MaterialType;
             ApplyMaterial(go, type);
 
@@ -594,6 +727,12 @@ public class WardenRoomGenerator : MonoBehaviour
 
         // 電擊球：每區段多次擲骰，通過者於區段盒狀範圍內隨機座標生成
         TrySpawnElectricOrbsForChunk(chunkIndex);
+
+        // 砲台：邏輯與電擊球相同，垂直範圍為 Y 5～35
+        TrySpawnTurretsForChunk(chunkIndex);
+
+        // 雷射柱：邏輯與電擊球相同，區段盒內隨機 X／Y／Z（Y 為 5～35）
+        TrySpawnLaserPillarsForChunk(chunkIndex);
 
         // 氣流噴射口：邏輯與電擊球相同，垂直範圍為 Y 2～35
         TrySpawnAirVentsForChunk(chunkIndex);
@@ -726,6 +865,117 @@ public class WardenRoomGenerator : MonoBehaviour
     }
 
     /// <summary>
+    /// 區段生成完畢後，最多嘗試 <see cref="turretMaxPerChunk"/> 次；
+    /// 每次以 <see cref="GetObstacleChance"/> 擲骰，通過則於區段內隨機 X／Y／Z 生成一座砲台（Y 為 5～35）。
+    /// 砲台不套用平台用的隨機 <c>localScale</c>，實例化後維持 Prefab 預設縮放（通常為 (1,1,1)）。
+    /// </summary>
+    private void TrySpawnTurretsForChunk(int chunkIndex)
+    {
+        if (turretPrefab == null)
+            return;
+
+        float zDistance = chunkIndex * chunkDepth;
+        float ramp = Mathf.Max(1f, turretRampDistance);
+        float chance = GetObstacleChance(zDistance, turretStartDistance, turretMaxChance, ramp);
+
+        float zMin = zDistance;
+        float zMax = zDistance + chunkDepth;
+        float halfW = chunkWidth * 0.5f;
+
+        int maxSpawns = Mathf.Clamp(turretMaxPerChunk, 1, 5);
+        for (int n = 0; n < maxSpawns; n++)
+        {
+            float roll = (float)_rng.NextDouble();
+            if (roll >= chance)
+                continue;
+
+            Vector3 pos = new Vector3(
+                RandomRange(-halfW, halfW),
+                RandomRange(5f, 35f),
+                RandomRange(zMin, zMax));
+
+            // 僅設定位置與父節點；不設定 localScale，砲台維持 Prefab 的 (1,1,1)（隨機縮放僅用於平台）
+            GameObject turret = Instantiate(turretPrefab, pos, Quaternion.identity, generatedRoot);
+            turret.name = $"Turret_c{chunkIndex}_{n:000}";
+            _activeTurrets.Add(turret);
+        }
+    }
+
+    /// <summary>
+    /// 區段生成完畢後，最多嘗試 <see cref="laserMaxPerChunk"/> 次；
+    /// 每次以 <see cref="GetObstacleChance"/> 擲骰，通過則隨機擇上／下／左／右之一為發射軸，
+    /// 於對應邊界或頂／底面生成，並呼叫 <see cref="LaserPillar.SetDirectionAndLength"/> 設定方向與長度。
+    /// </summary>
+    private void TrySpawnLaserPillarsForChunk(int chunkIndex)
+    {
+        if (laserPillarPrefab == null)
+            return;
+
+        // 第一個區段為出生／教學區，不生成雷射柱，避免開局即被擊落
+        if (chunkIndex == 0)
+            return;
+
+        float zDistance = chunkIndex * chunkDepth;
+        float ramp = Mathf.Max(1f, laserRampDistance);
+        float chance = GetObstacleChance(zDistance, laserStartDistance, laserMaxChance, ramp);
+
+        float zMin = zDistance;
+        float zMax = zDistance + chunkDepth;
+        float halfW = chunkWidth * 0.5f;
+
+        int maxSpawns = Mathf.Clamp(laserMaxPerChunk, 1, 10);
+        for (int n = 0; n < maxSpawns; n++)
+        {
+            float roll = (float)_rng.NextDouble();
+            if (roll >= chance)
+                continue;
+
+            // 僅四向（上／下／左／右），不選前後；生成點貼邊或頂／底，長度與空間尺寸一致
+            int axisKind = _rng.Next(0, 4);
+            Vector3 pos;
+            Vector3 fireDir;
+            float laserLen;
+            switch (axisKind)
+            {
+                case 0: // 頂部，向下發射
+                    pos = new Vector3(RandomRange(-halfW, halfW), SpaceY, RandomRange(zMin, zMax));
+                    fireDir = Vector3.down;
+                    laserLen = SpaceY;
+                    break;
+                case 1: // 底部，向上發射
+                    pos = new Vector3(RandomRange(-halfW, halfW), 0f, RandomRange(zMin, zMax));
+                    fireDir = Vector3.up;
+                    laserLen = SpaceY;
+                    break;
+                case 2: // 左側邊界，向右發射
+                    pos = new Vector3(-halfW, RandomRange(5f, 35f), RandomRange(zMin, zMax));
+                    fireDir = Vector3.right;
+                    laserLen = chunkWidth;
+                    break;
+                default: // 右側邊界，向左發射
+                    pos = new Vector3(halfW, RandomRange(5f, 35f), RandomRange(zMin, zMax));
+                    fireDir = Vector3.left;
+                    laserLen = chunkWidth;
+                    break;
+            }
+
+            GameObject pillar = Instantiate(laserPillarPrefab, pos, Quaternion.identity, generatedRoot);
+            pillar.name = $"LaserPillar_c{chunkIndex}_{n:000}";
+
+            LaserPillar laserPillar = pillar.GetComponent<LaserPillar>();
+            if (laserPillar == null)
+            {
+                Debug.LogWarning("[WardenRoomGenerator] laserPillarPrefab 缺少 LaserPillar 元件，已銷毀實例。");
+                Destroy(pillar);
+                continue;
+            }
+
+            laserPillar.SetDirectionAndLength(fireDir, laserLen);
+            _activeLaserPillars.Add(pillar);
+        }
+    }
+
+    /// <summary>
     /// 區段生成完畢後，最多嘗試 <see cref="ventMaxPerChunk"/> 次；
     /// 每次以 <see cref="GetObstacleChance"/> 擲骰，通過則於區段內隨機 X／Y／Z 生成一個氣流噴射口（Y 為 2～35）。
     /// </summary>
@@ -828,6 +1078,30 @@ public class WardenRoomGenerator : MonoBehaviour
         _activeElectricOrbs.Clear();
     }
 
+    /// <summary>重置或換局時銷毀場上所有砲台。</summary>
+    private void DestroyAllTurrets()
+    {
+        for (int i = 0; i < _activeTurrets.Count; i++)
+        {
+            if (_activeTurrets[i] != null)
+                Destroy(_activeTurrets[i]);
+        }
+
+        _activeTurrets.Clear();
+    }
+
+    /// <summary>重置或換局時銷毀場上所有雷射柱。</summary>
+    private void DestroyAllLaserPillars()
+    {
+        for (int i = 0; i < _activeLaserPillars.Count; i++)
+        {
+            if (_activeLaserPillars[i] != null)
+                Destroy(_activeLaserPillars[i]);
+        }
+
+        _activeLaserPillars.Clear();
+    }
+
     /// <summary>重置或換局時銷毀場上所有氣流噴射口。</summary>
     private void DestroyAllAirVents()
     {
@@ -878,6 +1152,48 @@ public class WardenRoomGenerator : MonoBehaviour
             {
                 Destroy(orb);
                 _activeElectricOrbs.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>玩家後方過遠的砲台直接銷毀（邏輯同 <see cref="DestroyFanObstaclesBehindPlayer"/>）。</summary>
+    private void DestroyTurretsBehindPlayer(float playerZ)
+    {
+        float threshold = playerZ - destroyBehindDistance;
+        for (int i = _activeTurrets.Count - 1; i >= 0; i--)
+        {
+            GameObject turret = _activeTurrets[i];
+            if (turret == null)
+            {
+                _activeTurrets.RemoveAt(i);
+                continue;
+            }
+
+            if (threshold > turret.transform.position.z)
+            {
+                Destroy(turret);
+                _activeTurrets.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>玩家後方過遠的雷射柱直接銷毀（邏輯同 <see cref="DestroyFanObstaclesBehindPlayer"/>）。</summary>
+    private void DestroyLaserPillarsBehindPlayer(float playerZ)
+    {
+        float threshold = playerZ - destroyBehindDistance;
+        for (int i = _activeLaserPillars.Count - 1; i >= 0; i--)
+        {
+            GameObject pillar = _activeLaserPillars[i];
+            if (pillar == null)
+            {
+                _activeLaserPillars.RemoveAt(i);
+                continue;
+            }
+
+            if (threshold > pillar.transform.position.z)
+            {
+                Destroy(pillar);
+                _activeLaserPillars.RemoveAt(i);
             }
         }
     }
